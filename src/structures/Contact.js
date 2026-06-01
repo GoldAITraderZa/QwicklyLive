@@ -154,27 +154,27 @@ class Contact extends Base {
     async block() {
         if (this.isGroup) return false;
 
+        const mapping = await this.client.getContactLidAndPhone([
+            this.id._serialized,
+        ]);
+
+        const phoneWid = mapping[0]?.pn || this.id._serialized;
+
         await this.client.pupPage.evaluate(async (contactId) => {
-            const contact = await window
-                .require('WAWebCollections')
-                .Contact.find(contactId);
-            const lid = contact.id.isLid()
-                ? contact.id
-                : window
-                      .require('WAWebApiContact')
-                      .getAlternateUserWid(contact.id);
-            const ContactToBlock = {
-                id: lid,
-                isContactBlocked: false,
-                phoneNumber: null,
-            };
+            const wid = window.require('WAWebWidFactory').createWid(contactId);
+
+            const chat = window
+                .require('WAWebChatCollection')
+                .ChatCollection.getLatestChatForWid(wid);
+
             await window.require('WAWebBlockContactAction').blockContact({
-                contact: ContactToBlock,
+                contact: chat.contact,
                 blockEntryPoint: 'ChatListBlock',
             });
-        }, this.id._serialized);
+        }, phoneWid);
 
         this.isBlocked = true;
+
         return true;
     }
 
@@ -185,25 +185,26 @@ class Contact extends Base {
     async unblock() {
         if (this.isGroup) return false;
 
-        await this.client.pupPage.evaluate(async (contactId) => {
-            let contact = await window
-                .require('WAWebCollections')
-                .Contact.find(contactId);
-            if (!contact.id.isLid()) {
-                const lid = window
-                    .require('WAWebApiContact')
-                    .getAlternateUserWid(contact.id);
+        const mapping = await this.client.getContactLidAndPhone([
+            this.id._serialized,
+        ]);
 
-                contact = await window
-                    .require('WAWebCollections')
-                    .Contact.find(lid._serialized);
-            }
+        const phoneWid = mapping[0]?.pn || this.id._serialized;
+
+        await this.client.pupPage.evaluate(async (contactId) => {
+            const wid = window.require('WAWebWidFactory').createWid(contactId);
+
+            const chat = window
+                .require('WAWebChatCollection')
+                .ChatCollection.getLatestChatForWid(wid);
+
             await window
                 .require('WAWebBlockContactAction')
-                .unblockContact(contact, 'ChatListBlock');
-        }, this.id._serialized);
+                .unblockContact(chat.contact);
+        }, phoneWid);
 
         this.isBlocked = false;
+
         return true;
     }
 
