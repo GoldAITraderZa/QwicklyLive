@@ -143,10 +143,10 @@ class InterfaceController {
                 throw new Error(
                     'This version of Whatsapp Web does not support features',
                 );
-            for (const feature in features) {
+            for (const feature of features) {
                 window
                     .require('WAWebCollections')
-                    .Features.setFeature(features[feature], true);
+                    .Features.setFeature(feature, true);
             }
         }, features);
     }
@@ -161,10 +161,10 @@ class InterfaceController {
                 throw new Error(
                     'This version of Whatsapp Web does not support features',
                 );
-            for (const feature in features) {
+            for (const feature of features) {
                 window
                     .require('WAWebCollections')
-                    .Features.setFeature(features[feature], false);
+                    .Features.setFeature(feature, false);
             }
         }, features);
     }

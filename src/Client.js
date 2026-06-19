@@ -1441,7 +1441,7 @@ class Client extends EventEmitter {
                 )
             ) {
                 console.warn(
-                    'Mentions with an array of Contact are now deprecated. See more at https://github.com/wwebjssapp-web.js/pull/2166.',
+                    'Mentions with an array of Contact are now deprecated. See more at https://github.com/wwebjs/whatsapp-web.js/pull/2166.',
                 );
                 options.mentions = options.mentions.map(
                     (a) => a.id._serialized,
@@ -2025,7 +2025,7 @@ class Client extends EventEmitter {
                 getAsModel: false,
             });
             await window.require('WAWebCmd').Cmd.archiveChat(chat, false);
-            return false;
+            return true;
         }, chatId);
     }
 
@@ -2069,7 +2069,7 @@ class Client extends EventEmitter {
                 return false;
             }
             await window.require('WAWebCmd').Cmd.pinChat(chat, false);
-            return false;
+            return true;
         }, chatId);
     }
 
@@ -2310,7 +2310,9 @@ class Client extends EventEmitter {
      */
     async createGroup(title, participants = [], options = {}) {
         !Array.isArray(participants) && (participants = [participants]);
-        participants.map((p) => (p instanceof Contact ? p.id._serialized : p));
+        participants = participants.map((p) =>
+            p instanceof Contact ? p.id._serialized : p,
+        );
 
         return await this.pupPage.evaluate(
             async (title, participants, options) => {
@@ -2362,7 +2364,7 @@ class Client extends EventEmitter {
                                 memberAddMode: options.memberAddMode ?? false,
                                 membershipApprovalMode:
                                     options.membershipApprovalMode ?? false,
-                                announce: options.announce ?? false,
+                                announce: options.isAnnounce ?? false,
                                 restrict:
                                     options.isRestrict !== undefined
                                         ? !options.isRestrict
@@ -2785,7 +2787,7 @@ class Client extends EventEmitter {
 
             if (status) return window.WWebJS.getStatusModel(status);
         }, contactId);
-        return new Broadcast(this, broadcast);
+        return broadcast ? new Broadcast(this, broadcast) : undefined;
     }
 
     /**
@@ -2880,7 +2882,7 @@ class Client extends EventEmitter {
         });
 
         return blockedContacts.map((contact) =>
-            ContactFactory.create(this.client, contact),
+            ContactFactory.create(this, contact),
         );
     }
 
@@ -3427,7 +3429,7 @@ class Client extends EventEmitter {
 
         return pollVotes.map(
             (pollVote) =>
-                new PollVote(this.client, { ...pollVote, parentMessage: msg }),
+                new PollVote(this, { ...pollVote, parentMessage: msg }),
         );
     }
 }
