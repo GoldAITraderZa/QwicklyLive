@@ -63,6 +63,12 @@
         "prettier": "^3.8.1",
         "sinon": "^21.0.2"
     },
+    "overrides": {
+        "diff": "9.0.0",
+        "serialize-javascript": "7.0.6",
+        "markdown-it": "14.2.0",
+        "js-yaml": "4.2.0"
+    },
     "engines": {
         "node": ">=18.0.0"
     },
