@@ -537,8 +537,39 @@ exports.LoadUtils = () => {
         if (isStatus) {
             const { backgroundColor, fontStyle } = extraOptions;
             const isMedia = Object.keys(mediaOptions).length > 0;
-            const mediaUpdate = (data) =>
-                window.require('WAWebMediaUpdateMsg')(data, mediaOptions);
+            const StatusAction = window.require('WAWebSendStatusMsgAction');
+
+            if (isMedia) {
+                // Current WhatsApp Web builds changed sendStatusMediaMsgAction to
+                // take a single object ({ mediaMsgData, beforeSend, funnelContext })
+                // and require LID identities (PN WIDs are no longer accepted). The
+                // previous positional call `(msg, mediaUpdate)` makes the module
+                // read `arg.mediaMsgData.id` on an undefined value and throw
+                // "Cannot read properties of undefined (reading 'id')".
+                const meUser = window.require('WAWebUserPrefsMeUser');
+                const lidUser = meUser.getMaybeMeLidUser();
+                const deviceLid = meUser.getMeDeviceLidOrThrow();
+                const MsgKey = window.require('WAWebMsgKey');
+                const mediaMsgData = {
+                    ...message,
+                    id: new MsgKey({
+                        fromMe: true,
+                        remote: chat.id,
+                        id: await MsgKey.newId(),
+                        participant: lidUser,
+                    }),
+                    from: deviceLid,
+                    to: chat.id,
+                    author: lidUser,
+                };
+                const result = await StatusAction.sendStatusMediaMsgAction({
+                    mediaMsgData,
+                    beforeSend: async () => {},
+                    funnelContext: undefined,
+                });
+                return result && result.msg ? result.msg : undefined;
+            }
+
             const msg = new (window.require('WAWebCollections').Msg.modelClass)(
                 {
                     ...message,
@@ -546,9 +577,11 @@ exports.LoadUtils = () => {
                     messageSecret: window.crypto.getRandomValues(
                         new Uint8Array(32),
                     ),
+                    // Guarded: this gating helper is absent from some WhatsApp Web
+                    // builds and would otherwise throw while building the model.
                     cannotBeRanked: window
                         .require('WAWebStatusGatingUtils')
-                        .canCheckStatusRankingPosterGating(),
+                        .canCheckStatusRankingPosterGating?.() ?? false,
                 },
             );
 
@@ -562,13 +595,7 @@ exports.LoadUtils = () => {
                 text: msg.body,
             };
 
-            await window
-                .require('WAWebSendStatusMsgAction')
-                [
-                    isMedia
-                        ? 'sendStatusMediaMsgAction'
-                        : 'sendStatusTextMsgAction'
-                ](...(isMedia ? [msg, mediaUpdate] : [statusOptions]));
+            await StatusAction.sendStatusTextMsgAction(statusOptions);
 
             return msg;
         }
