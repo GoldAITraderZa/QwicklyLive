@@ -537,38 +537,13 @@ exports.LoadUtils = () => {
         if (isStatus) {
             const { backgroundColor, fontStyle } = extraOptions;
             const isMedia = Object.keys(mediaOptions).length > 0;
-            const StatusAction = window.require('WAWebSendStatusMsgAction');
 
-            if (isMedia) {
-                // Current WhatsApp Web builds changed sendStatusMediaMsgAction to
-                // take a single object ({ mediaMsgData, beforeSend, funnelContext })
-                // and require LID identities (PN WIDs are no longer accepted). The
-                // previous positional call `(msg, mediaUpdate)` makes the module
-                // read `arg.mediaMsgData.id` on an undefined value and throw
-                // "Cannot read properties of undefined (reading 'id')".
-                const meUser = window.require('WAWebUserPrefsMeUser');
-                const lidUser = meUser.getMaybeMeLidUser();
-                const deviceLid = meUser.getMeDeviceLidOrThrow();
-                const MsgKey = window.require('WAWebMsgKey');
-                const mediaMsgData = {
-                    ...message,
-                    id: new MsgKey({
-                        fromMe: true,
-                        remote: chat.id,
-                        id: await MsgKey.newId(),
-                        participant: lidUser,
-                    }),
-                    from: deviceLid,
-                    to: chat.id,
-                    author: lidUser,
-                };
-                const result = await StatusAction.sendStatusMediaMsgAction({
-                    mediaMsgData,
-                    beforeSend: async () => {},
-                    funnelContext: undefined,
-                });
-                return result && result.msg ? result.msg : undefined;
-            }
+            const mediaMsgData = {
+                ...message,
+                from: from,
+                to: chat.id,
+                author: from,
+            };
 
             const msg = new (window.require('WAWebCollections').Msg.modelClass)(
                 {
@@ -595,9 +570,29 @@ exports.LoadUtils = () => {
                 text: msg.body,
             };
 
-            await StatusAction.sendStatusTextMsgAction(statusOptions);
+            await window
+                .require('WAWebSendStatusMsgAction')
+                [
+                    isMedia
+                        ? 'sendStatusMediaMsgAction'
+                        : 'sendStatusTextMsgAction'
+                ](
+                    ...(isMedia
+                        ? [
+                              {
+                                  mediaMsgData,
+                                  beforeSend: async () => {},
+                                  funnelContext: undefined,
+                              },
+                          ]
+                        : [statusOptions]),
+                );
 
-            return msg;
+            return isMedia
+                ? new (window.require('WAWebCollections').Msg.modelClass)(
+                      mediaMsgData,
+                  )
+                : msg;
         }
 
         const [msgPromise, sendMsgResultPromise] = window
