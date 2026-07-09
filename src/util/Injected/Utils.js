@@ -554,9 +554,7 @@ exports.LoadUtils = () => {
                     ),
                     // Guarded: this gating helper is absent from some WhatsApp Web
                     // builds and would otherwise throw while building the model.
-                    cannotBeRanked: window
-                        .require('WAWebStatusGatingUtils')
-                        .canCheckStatusRankingPosterGating?.() ?? false,
+                    cannotBeRanked: false,
                 },
             );
 
