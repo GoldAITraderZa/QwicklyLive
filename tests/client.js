@@ -182,6 +182,19 @@ describe('Client', function () {
             console.log(`WA Version: ${version}`);
         });
 
+        describe('Client Info', function () {
+            it('exposes the current user LID when the account has one', function () {
+                const { lid } = client.info;
+                if (lid) {
+                    expect(lid).to.have.property('_serialized');
+                    expect(lid._serialized).to.match(/@lid$/);
+                } else {
+                    // Not every account has a LID-addressing identity.
+                    expect(lid).to.be.undefined;
+                }
+            });
+        });
+
         describe('Send Messages', function () {
             it('can send a message', async function () {
                 const msg = await client.sendMessage(remoteId, 'hello world');
