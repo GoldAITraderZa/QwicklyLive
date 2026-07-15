@@ -350,6 +350,9 @@ class Client extends EventEmitter {
                                         window
                                             .require('WAWebUserPrefsMeUser')
                                             .getMaybeMeLidUser(),
+                                    lid: window
+                                        .require('WAWebUserPrefsMeUser')
+                                        .getMaybeMeLidUser(),
                                 };
                             }),
                         );
