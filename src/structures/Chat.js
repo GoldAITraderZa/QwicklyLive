@@ -64,12 +64,6 @@ class Chat extends Base {
         this.pinned = !!data.pin;
 
         /**
-         * Indicates if the Chat is locked
-         * @type {boolean}
-         */
-        this.isLocked = data.isLocked;
-
-        /**
          * Indicates if the chat is muted or not
          * @type {boolean}
          */
@@ -85,17 +79,15 @@ class Chat extends Base {
          * Last message fo chat
          * @type {Message}
          */
-        this.lastMessage = data.lastMessage
-            ? new Message(this.client, data.lastMessage)
-            : undefined;
-
+        this.lastMessage = data.lastMessage ? new Message(this.client, data.lastMessage) : undefined;
+        
         return super._patch(data);
     }
 
     /**
      * Send a message to this chat
      * @param {string|MessageMedia|Location} content
-     * @param {MessageSendOptions} [options]
+     * @param {MessageSendOptions} [options] 
      * @returns {Promise<Message>} Message that was just sent
      */
     async sendMessage(content, options) {
@@ -115,7 +107,7 @@ class Chat extends Base {
      * @returns {Promise<boolean>} result
      */
     async clearMessages() {
-        return this.client.pupPage.evaluate((chatId) => {
+        return this.client.pupPage.evaluate(chatId => {
             return window.WWebJS.sendClearChat(chatId);
         }, this.id._serialized);
     }
@@ -125,7 +117,7 @@ class Chat extends Base {
      * @returns {Promise<Boolean>} result
      */
     async delete() {
-        return this.client.pupPage.evaluate((chatId) => {
+        return this.client.pupPage.evaluate(chatId => {
             return window.WWebJS.sendDeleteChat(chatId);
         }, this.id._serialized);
     }
@@ -166,10 +158,7 @@ class Chat extends Base {
      * @returns {Promise<{isMuted: boolean, muteExpiration: number}>}
      */
     async mute(unmuteDate) {
-        const result = await this.client.muteChat(
-            this.id._serialized,
-            unmuteDate,
-        );
+        const result = await this.client.muteChat(this.id._serialized, unmuteDate);
         this.isMuted = result.isMuted;
         this.muteExpiration = result.muteExpiration;
         return result;
@@ -189,7 +178,7 @@ class Chat extends Base {
     /**
      * Mark this chat as unread
      */
-    async markUnread() {
+    async markUnread(){
         return this.client.markChatUnread(this.id._serialized);
     }
 
@@ -201,56 +190,209 @@ class Chat extends Base {
      * @returns {Promise<Array<Message>>}
      */
     async fetchMessages(searchOptions) {
-        let messages = await this.client.pupPage.evaluate(
-            async (chatId, searchOptions) => {
-                const msgFilter = (m) => {
-                    if (m.isNotification) {
-                        return false; // dont include notification messages
-                    }
-                    if (
-                        searchOptions &&
-                        searchOptions.fromMe !== undefined &&
-                        m.id.fromMe !== searchOptions.fromMe
-                    ) {
-                        return false;
-                    }
-                    return true;
-                };
-
-                const chat = await window.WWebJS.getChat(chatId, {
-                    getAsModel: false,
-                });
-                let msgs = chat.msgs.getModelsArray().filter(msgFilter);
-
-                if (searchOptions && searchOptions.limit > 0) {
-                    while (msgs.length < searchOptions.limit) {
-                        const loadedMessages = await window
-                            .require('WAWebChatLoadMessages')
-                            .loadEarlierMsgs({ chat });
-                        if (!loadedMessages || !loadedMessages.length) break;
-                        msgs = [...loadedMessages.filter(msgFilter), ...msgs];
-                    }
-
-                    if (msgs.length > searchOptions.limit) {
-                        msgs.sort((a, b) => (a.t > b.t ? 1 : -1));
-                        msgs = msgs.splice(msgs.length - searchOptions.limit);
-                    }
+        let messages = await this.client.pupPage.evaluate(async (chatId, searchOptions) => {
+            const msgFilter = (m) => {
+                if (m.isNotification) {
+                    return false; // dont include notification messages
                 }
+                if (searchOptions && searchOptions.fromMe !== undefined && m.id.fromMe !== searchOptions.fromMe) {
+                    return false;
+                }
+                return true;
+            };
 
-                return msgs.map((m) => window.WWebJS.getMessageModel(m));
-            },
-            this.id._serialized,
-            searchOptions,
-        );
+            const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
+            let msgs = chat.msgs.getModelsArray().filter(msgFilter);
 
-        return messages.map((m) => new Message(this.client, m));
+            if (searchOptions && searchOptions.limit > 0) {
+                    const msgFindLocal = window.require(
+                        'WAWebDBMessageFindLocal',
+                    );
+                    const WAWebMsgKey = window.require('WAWebMsgKey');
+                    const MsgStore = window.require('WAWebCollections').Msg;
+
+                    const findBefore = async (anchorKey, count) => {
+                        if (
+                            typeof msgFindLocal.msgFindByDirection ===
+                            'function'
+                        ) {
+                            return await msgFindLocal.msgFindByDirection({
+                                anchor: anchorKey,
+                                count,
+                                direction: 'before',
+                            });
+                        }
+                        return await msgFindLocal.msgFindBefore({
+                            anchor: anchorKey,
+                            count,
+                        });
+                    };
+
+                    const toMsgKey = (id) => {
+                        if (!id) return null;
+                        if (id instanceof WAWebMsgKey) return id;
+                        const s =
+                            typeof id === 'string'
+                                ? id
+                                : id._serialized || id.$1 || id?.toString?.();
+                        return s ? WAWebMsgKey.fromString(s) : null;
+                    };
+
+                    const toMsgModels = (rawMessages) => {
+                        const out = [];
+                        for (const m of rawMessages) {
+                            if (m && typeof m.serialize === 'function') {
+                                out.push(m);
+                                continue;
+                            }
+                            const serialized =
+                                m?.id?._serialized ||
+                                m?.id?.$1 ||
+                                (typeof m === 'string' ? m : null);
+                            let model =
+                                (serialized && MsgStore.get(serialized)) ||
+                                (m?.id &&
+                                    MsgStore.get(
+                                        m.id._serialized || m.id.$1 || m.id,
+                                    )) ||
+                                null;
+                            if (!model && m && MsgStore.modelClass) {
+                                try {
+                                    model = new MsgStore.modelClass(m);
+                                } catch (e) {
+                                    model = null;
+                                }
+                            }
+                            if (model) out.push(model);
+                        }
+                        return out;
+                    };
+
+                    const dedupeByMsgId = (arr) => {
+                        const seen = new Set();
+                        const msgKeyOf = (m) => {
+                            const id = m.id;
+                            if (!id) return null;
+                            if (id._serialized) return id._serialized;
+                            if (id.$1) return id.$1;
+                            const s = id.toString?.();
+                            return s && s !== '[object Object]' ? s : null;
+                        };
+                        return arr.filter((m) => {
+                            const key = msgKeyOf(m);
+                            if (!key) return true;
+                            if (seen.has(key)) return false;
+                            seen.add(key);
+                            return true;
+                        });
+                    };
+
+                    const limit = searchOptions.limit;
+                    const finite = Number.isFinite(limit);
+                    const fromMeFilter =
+                        searchOptions && searchOptions.fromMe !== undefined;
+
+                    if (!fromMeFilter && finite) {
+                        const anchorSerialized =
+                            chat.lastReceivedKey?.toString();
+                        if (!anchorSerialized) {
+                            msgs.sort((a, b) => (a.t > b.t ? 1 : -1));
+                            msgs = msgs.slice(-Math.min(limit, msgs.length));
+                        } else {
+                            const fetchCount = Math.max(0, limit - 1);
+                            const anchorKey = toMsgKey(anchorSerialized);
+                            const result = await findBefore(
+                                anchorKey,
+                                fetchCount,
+                            );
+                            const rawMessages = Array.isArray(result)
+                                ? result
+                                : result?.messages || [];
+                            if (
+                                result?.status === 404 &&
+                                (!rawMessages || !rawMessages.length)
+                            ) {
+                                msgs = [];
+                            } else {
+                                let loaded = toMsgModels(rawMessages);
+                                const anchorMsg =
+                                    MsgStore.get(anchorSerialized);
+                                let merged = [
+                                    ...loaded,
+                                    ...(anchorMsg ? [anchorMsg] : []),
+                                ];
+                                merged = merged.filter(
+                                    (m) => !m.isNotification,
+                                );
+                                merged.sort((a, b) => (a.t > b.t ? 1 : -1));
+                                merged = dedupeByMsgId(merged);
+                                msgs = merged.filter(msgFilter);
+                                if (msgs.length > limit) {
+                                    msgs = msgs.slice(-limit);
+                                }
+                            }
+                        }
+                    } else {
+                        msgs.sort((a, b) => (a.t > b.t ? 1 : -1));
+                        const batchCap = finite ? limit : 100;
+                        while (msgs.length < limit || !finite) {
+                            const anchor =
+                                msgs[0]?.id ||
+                                chat.msgs.getModelsArray()[0]?.id ||
+                                chat.lastReceivedKey;
+                            if (!anchor) break;
+
+                            const anchorKey = toMsgKey(anchor);
+                            if (!anchorKey) break;
+
+                            const need = finite
+                                ? Math.min(batchCap, limit - msgs.length)
+                                : batchCap;
+                            if (need <= 0) break;
+
+                            const result = await findBefore(anchorKey, need);
+                            const rawMessages = Array.isArray(result)
+                                ? result
+                                : result?.messages || [];
+                            if (result?.status === 404 || !rawMessages.length) {
+                                break;
+                            }
+
+                            const loadedMessages = toMsgModels(rawMessages);
+                            if (!loadedMessages.length) break;
+
+                            const prevLen = msgs.length;
+                            msgs = dedupeByMsgId([
+                                ...loadedMessages.filter(msgFilter),
+                                ...msgs,
+                            ]);
+                            msgs.sort((a, b) => (a.t > b.t ? 1 : -1));
+
+                            if (msgs.length === prevLen) break;
+
+                            if (!finite && loadedMessages.length < need) {
+                                break;
+                            }
+                        }
+
+                        if (finite && msgs.length > limit) {
+                            msgs = msgs.slice(-limit);
+                        }
+                    }
+            }
+
+            return msgs.map(m => window.WWebJS.getMessageModel(m));
+
+        }, this.id._serialized, searchOptions);
+
+        return messages.map(m => new Message(this.client, m));
     }
 
     /**
      * Simulate typing in chat. This will last for 25 seconds.
      */
     async sendStateTyping() {
-        return this.client.pupPage.evaluate((chatId) => {
+        return this.client.pupPage.evaluate(chatId => {
             window.WWebJS.sendChatstate('typing', chatId);
             return true;
         }, this.id._serialized);
@@ -260,7 +402,7 @@ class Chat extends Base {
      * Simulate recording audio in chat. This will last for 25 seconds.
      */
     async sendStateRecording() {
-        return this.client.pupPage.evaluate((chatId) => {
+        return this.client.pupPage.evaluate(chatId => {
             window.WWebJS.sendChatstate('recording', chatId);
             return true;
         }, this.id._serialized);
@@ -270,7 +412,7 @@ class Chat extends Base {
      * Stops typing or recording in chat immediately.
      */
     async clearState() {
-        return this.client.pupPage.evaluate((chatId) => {
+        return this.client.pupPage.evaluate(chatId => {
             window.WWebJS.sendChatstate('stop', chatId);
             return true;
         }, this.id._serialized);
@@ -308,7 +450,7 @@ class Chat extends Base {
     async getPinnedMessages() {
         return this.client.getPinnedMessages(this.id._serialized);
     }
-
+    
     /**
      * Sync chat history conversation
      * @return {Promise<boolean>} True if operation completed successfully, false otherwise.
@@ -343,7 +485,7 @@ class Chat extends Base {
      */
     async getCustomerNote() {
         if (this.isGroup || this.isChannel) return null;
-
+        
         return this.client.getCustomerNote(this.id._serialized);
     }
 }
