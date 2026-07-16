@@ -836,6 +836,20 @@ exports.LoadUtils = () => {
             });
         }
 
+        // The rename reaches the serialized model too: `msg.id` comes back carrying `$1` and no
+        // `_serialized`, so every consumer of `message.id._serialized` — including this library's own
+        // Message structure and anything keyed on a message id — silently receives undefined. Restore
+        // it here, where `msg.id.remote` is already normalised, so the whole downstream surface keeps
+        // working rather than each caller having to know about `$1`.
+        if (typeof msg.id === 'object' && msg.id._serialized == null) {
+            const serializedId = window.WWebJS.getMsgKeyId(msg.id);
+            if (serializedId) {
+                msg.id = Object.assign({}, msg.id, {
+                    _serialized: serializedId,
+                });
+            }
+        }
+
         delete msg.pendingAckUpdate;
 
         return msg;
