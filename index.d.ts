@@ -212,10 +212,17 @@ declare namespace WAWebJS {
         ): Promise<Message>;
 
         /** Send a reaction to a specific messageId */
-        sendReaction(
-            messageId: string,
-            reaction: string,
-        ): Promise<void>;
+        sendReaction(messageId: string, reaction: string): Promise<void>;
+
+        /**
+         * Sends a presence state to a specific chat without fetching the chat from the database.
+         * @param {string} chatId The ID of the chat
+         * @param {string} state The presence state (e.g., 'typing', 'recording', 'paused')
+         */
+        sendPresenceUpdate(
+            chatId: string,
+            state?: 'typing' | 'recording' | 'paused',
+        ): Promise<boolean>;
 
         /** Sends a channel admin invitation to a user, allowing them to become an admin of the channel */
         sendChannelAdminInvite(
